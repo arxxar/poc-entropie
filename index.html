@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gas in a Box</title>
+<style>
+  body { font-family: sans-serif; background: #111; color: #ddd; margin: 0; padding: 16px; }
+  #controls { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; margin-bottom: 12px; }
+  label { display: flex; flex-direction: column; font-size: 13px; }
+  button { padding: 8px 16px; font-size: 14px; cursor: pointer; }
+  canvas { background: #000; border: 2px solid #555; display: block; }
+  #stats { margin-top: 8px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="controls">
+  <button id="add">New Molecule</button>
+  <label>Molecule size: <span id="sizeV"></span>
+    <input id="size" type="range" min="4" max="30" value="12"></label>
+  <label>T bottom (hot): <span id="tbV"></span>
+    <input id="tb" type="range" min="0" max="100" value="80"></label>
+  <label>T top (cold): <span id="ttV"></span>
+    <input id="tt" type="range" min="0" max="100" value="20"></label>
+  <label>Gravity: <span id="gV"></span>
+    <input id="g" type="range" min="0" max="100" value="0"></label>
+</div>
+<canvas id="c" width="800" height="600"></canvas>
+<div id="stats"></div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const $ = id => document.getElementById(id);
+
+const SPEED_PER_SQRT_T = 30;   // px/s per sqrt(temperature unit)
+const WALL_EXCHANGE = 0.5;     // fraction of speed difference adjusted per wall hit
+const GRAVITY_MAX = 600;       // px/s^2 at slider = 100
+const DT = 1 / 120;
+
+const molecules = [];
+
+function bind(id, out) {
+  const el = $(id), o = $(out);
+  const upd = () => { o.textContent = el.value; };
+  el.addEventListener('input', upd); upd();
+  return () => +el.value;
+}
+const getSize = bind('size', 'sizeV');
+const getTB = bind('tb', 'tbV');
+const getTT = bind('tt', 'ttV');
+const getG = bind('g', 'gV');
+
+const targetSpeed = T => SPEED_PER_SQRT_T * Math.sqrt(T);
+
+function addMolecule() {
+  const r = getSize() * (0.6 + Math.random() * 0.8);
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const x = r + Math.random() * (W - 2 * r);
+    const y = r + Math.random() * (H - 2 * r);
+    if (molecules.some(m => Math.hypot(m.x - x, m.y - y) < m.r + r)) continue;
+    const a = Math.random() * 2 * Math.PI;
+    const s = targetSpeed((getTB() + getTT()) / 2);
+    molecules.push({ x, y, r, m: r * r, vx: s * Math.cos(a), vy: s * Math.sin(a) });
+    return;
+  }
+}
+$('add').addEventListener('click', addMolecule);
+
+function wallHit(p, T) {
+  const s = Math.hypot(p.vx, p.vy);
+  if (s === 0) return;
+  const ns = s + WALL_EXCHANGE * (targetSpeed(T) - s);
+  p.vx *= ns / s; p.vy *= ns / s;
+}
+
+function step(dt) {
+  const g = getG() / 100 * GRAVITY_MAX;
+  for (const p of molecules) {
+    p.vy += g * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    if (p.x < p.r) { p.x = p.r; p.vx = Math.abs(p.vx); }
+    else if (p.x > W - p.r) { p.x = W - p.r; p.vx = -Math.abs(p.vx); }
+    // Canvas y grows downward: top wall is y = 0, bottom wall is y = H.
+    if (p.y < p.r) {
+      p.y = p.r; p.vy = Math.abs(p.vy); wallHit(p, getTT());
+      p.vy = Math.abs(p.vy);
+    } else if (p.y > H - p.r) {
+      p.y = H - p.r; p.vy = -Math.abs(p.vy); wallHit(p, getTB());
+      p.vy = -Math.abs(p.vy);
+    }
+  }
+  for (let i = 0; i < molecules.length; i++) {
+    for (let j = i + 1; j < molecules.length; j++) {
+      const a = molecules[i], b = molecules[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const minD = a.r + b.r;
+      if (dx * dx + dy * dy >= minD * minD) continue;
+      const d = Math.hypot(dx, dy) || 1e-6;
+      const nx = dx / d, ny = dy / d;
+      const overlap = minD - d;
+      const tm = a.m + b.m;
+      a.x -= nx * overlap * b.m / tm; a.y -= ny * overlap * b.m / tm;
+      b.x += nx * overlap * a.m / tm; b.y += ny * overlap * a.m / tm;
+      const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+      if (rel >= 0) continue;
+      const imp = -2 * rel / (1 / a.m + 1 / b.m);
+      a.vx -= imp * nx / a.m; a.vy -= imp * ny / a.m;
+      b.vx += imp * nx / b.m; b.vy += imp * ny / b.m;
+    }
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  // Wall temperature bars
+  ctx.fillStyle = `hsl(${240 - getTB() * 2.4}, 80%, 45%)`;
+  ctx.fillRect(0, H - 4, W, 4);
+  ctx.fillStyle = `hsl(${240 - getTT() * 2.4}, 80%, 45%)`;
+  ctx.fillRect(0, 0, W, 4);
+  let ke = 0;
+  for (const p of molecules) {
+    const s = Math.hypot(p.vx, p.vy);
+    ke += 0.5 * p.m * s * s;
+    const hue = 240 - Math.min(1, s / 400) * 240;
+    ctx.fillStyle = `hsl(${hue}, 85%, 55%)`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+  const n = molecules.length;
+  $('stats').textContent = `Molecules: ${n}  |  Mean kinetic energy: ${n ? Math.round(ke / n) : 0}`;
+}
+
+let last = performance.now(), acc = 0;
+function frame(now) {
+  acc += Math.min(0.05, (now - last) / 1000);
+  last = now;
+  while (acc >= DT) { step(DT); acc -= DT; }
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
