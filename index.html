@@ -76,6 +76,34 @@ function addMolecule() {
 }
 $('add').addEventListener('click', addMolecule);
 
+// Collision sound: generated blip (no asset). AudioContext is created/resumed on first user gesture.
+let audioCtx = null, lastBlip = 0;
+function unlockAudio() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    if (!audioCtx) audioCtx = new AC();
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  } catch (e) {}
+}
+['pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, unlockAudio, { passive: true }));
+
+function playCollision(freq) {
+  if (!audioCtx || audioCtx.state !== 'running') return;
+  const t = audioCtx.currentTime;
+  if (t - lastBlip < 0.015) return; // limit voices when many collisions occur at once
+  lastBlip = t;
+  try {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.05, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t); o.stop(t + 0.07);
+  } catch (e) {}
+}
+
 function wallHit(p, T) {
   const s = Math.hypot(p.vx, p.vy);
   if (s === 0) return;
@@ -89,14 +117,14 @@ function step(dt) {
     p.vy += g * dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    if (p.x < p.r) { p.x = p.r; p.vx = Math.abs(p.vx); }
-    else if (p.x > W - p.r) { p.x = W - p.r; p.vx = -Math.abs(p.vx); }
+    if (p.x < p.r) { p.x = p.r; p.vx = Math.abs(p.vx); playCollision(300); }
+    else if (p.x > W - p.r) { p.x = W - p.r; p.vx = -Math.abs(p.vx); playCollision(300); }
     // Canvas y grows downward: top wall is y = 0, bottom wall is y = H.
     if (p.y < p.r) {
-      p.y = p.r; p.vy = Math.abs(p.vy); wallHit(p, getTT());
+      p.y = p.r; p.vy = Math.abs(p.vy); wallHit(p, getTT()); playCollision(300);
       p.vy = Math.abs(p.vy);
     } else if (p.y > H - p.r) {
-      p.y = H - p.r; p.vy = -Math.abs(p.vy); wallHit(p, getTB());
+      p.y = H - p.r; p.vy = -Math.abs(p.vy); wallHit(p, getTB()); playCollision(300);
       p.vy = -Math.abs(p.vy);
     }
   }
@@ -114,6 +142,7 @@ function step(dt) {
       b.x += nx * overlap * a.m / tm; b.y += ny * overlap * a.m / tm;
       const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
       if (rel >= 0) continue;
+      playCollision(600);
       const imp = -2 * rel / (1 / a.m + 1 / b.m);
       a.vx -= imp * nx / a.m; a.vy -= imp * ny / a.m;
       b.vx += imp * nx / b.m; b.vy += imp * ny / b.m;
