@@ -11,7 +11,7 @@ A graphical analogy of a gas in a box. Molecules are drawn as circles and move a
 
 ### Molecules
 - FR-3: Each molecule is a circle with its own radius, position and velocity vector.
-- FR-4: Radii vary between molecules (random within a min/max range).
+- FR-4: A molecule's radius equals the size slider value at creation time; different sizes come from changing the slider between molecules.
 - FR-5: Mass is proportional to the circle area (r²).
 - FR-6: A new molecule appears at a random free position (no overlap) with a random direction and an initial speed matching the mean temperature.
 

@@ -53,7 +53,7 @@ const getG = bind('g', 'gV');
 const targetSpeed = T => SPEED_PER_SQRT_T * Math.sqrt(T);
 
 function addMolecule() {
-  const r = getSize() * (0.6 + Math.random() * 0.8);
+  const r = getSize();
   for (let attempt = 0; attempt < 200; attempt++) {
     const x = r + Math.random() * (W - 2 * r);
     const y = r + Math.random() * (H - 2 * r);
