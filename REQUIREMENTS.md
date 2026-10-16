@@ -6,7 +6,8 @@ A graphical analogy of a gas in a box. Molecules are drawn as circles and move a
 ## Functional Requirements
 
 ### Box
-- FR-1: A rectangular 2D box is displayed.
+- FR-1: A square 2D box is displayed.
+- FR-1a: A slider controls the box side length; changes take effect live and molecules outside the new bounds are moved inside.
 - FR-2: The box is empty at start (no molecules).
 
 ### Molecules
